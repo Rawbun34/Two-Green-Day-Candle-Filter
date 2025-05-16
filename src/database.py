@@ -25,9 +25,19 @@ class Database:
                     CREATE TABLE IF NOT EXISTS subscribers (
                         chat_id INTEGER PRIMARY KEY,
                         username TEXT,
-                        subscribed_at TIMESTAMP,
                         is_active BOOLEAN DEFAULT 1,
                         last_notification TIMESTAMP
+                    )
+                ''')
+                
+                # Create user_settings table
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS user_settings (
+                        chat_id INTEGER PRIMARY KEY,
+                        setting_name TEXT,
+                        setting_value TEXT,
+                        updated_at TIMESTAMP,
+                        FOREIGN KEY (chat_id) REFERENCES subscribers(chat_id)
                     )
                 ''')
                 
@@ -100,3 +110,29 @@ class Database:
         except Exception as e:
             logger.error(f"Error updating last notification: {e}")
             return False
+
+    def get_user_setting(self, chat_id, setting_name, default_value=None):
+        """Get a user's setting value
+        
+        Args:
+            chat_id (int): The user's chat ID
+            setting_name (str): The name of the setting to retrieve
+            default_value: The default value to return if setting doesn't exist
+            
+        Returns:
+            The setting value or default_value if not found
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT setting_value
+                    FROM user_settings
+                    WHERE chat_id = ? AND setting_name = ?
+                ''', (chat_id, setting_name))
+                
+                result = cursor.fetchone()
+                return result[0] if result else default_value
+        except Exception as e:
+            logger.error(f"Error getting user setting: {e}")
+            return default_value

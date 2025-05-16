@@ -12,7 +12,7 @@ load_dotenv()
 env_loaded = True
 
 # Import the trading strategy
-from src.two_green_filter_binance import CryptoTradingStrategy
+from two_green_filter_binance import CryptoTradingStrategy
 
 # Enable logging
 logging.basicConfig(
@@ -37,23 +37,25 @@ class CryptoSignalBot:
         """Set up scheduled jobs"""
         job_queue = self.application.job_queue
         
-        # Get all active subscribers and their preferred notification times
+        # Get all active subscribers
         subscribers = self.db.get_active_subscribers()
         
-        # Schedule jobs for each subscriber's preferred time
-        for subscriber in subscribers:
-            chat_id, _, _, _, scan_days, notification_time = subscriber
-            if notification_time:
-                try:
-                    hour, minute = map(int, notification_time.split(':'))
-                    job_queue.run_daily(
-                        self.scheduled_scan,
-                        time=time(hour, minute),
-                        days=(0, 1, 2, 3, 4, 5, 6),
-                        data={'chat_id': chat_id, 'scan_days': scan_days or 30}
-                    )
-                except Exception as e:
-                    logger.error(f"Error scheduling job for {chat_id}: {e}")
+        # Schedule jobs for each subscriber
+        for chat_id, username in subscribers:
+            # Get user settings
+            scan_days = self.db.get_user_setting(chat_id, 'scan_days', '30')
+            notification_time = self.db.get_user_setting(chat_id, 'notification_time', '00:00')
+            
+            try:
+                hour, minute = map(int, notification_time.split(':'))
+                job_queue.run_daily(
+                    self.scheduled_scan,
+                    time=time(hour, minute),
+                    days=(0, 1, 2, 3, 4, 5, 6),
+                    data={'chat_id': chat_id, 'scan_days': int(scan_days)}
+                )
+            except Exception as e:
+                logger.error(f"Error scheduling job for {chat_id}: {e}")
         
         logger.info(f"Scheduled jobs set up for {len(subscribers)} subscribers")
 
@@ -94,18 +96,15 @@ class CryptoSignalBot:
     async def settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show current settings"""
         chat_id = update.effective_chat.id
-        settings = self.db.get_user_settings(chat_id)
         
-        if settings:
-            scan_days, notification_time = settings
-            await update.message.reply_text(
-                f"Current settings:\n"
-                f"報價貨幣: {self.crypto_strategy.quote_currency}\n"
-                # f"Notification time: {notification_time}\n"
-                f"Status: {'Subscribed' if self.db.get_active_subscribers() else 'Unsubscribed'}"
-            )
-        else:
-            await update.message.reply_text("No settings found. Use /subscribe to start receiving notifications.")
+        # Check if user is subscribed
+        is_subscribed = any(sub[0] == chat_id for sub in self.db.get_active_subscribers())
+        
+        await update.message.reply_text(
+            f"Current settings:\n"
+            f"報價貨幣: {self.crypto_strategy.quote_currency if self.crypto_strategy else 'USDT'}\n"
+            f"Status: {'Subscribed' if is_subscribed else 'Unsubscribed'}"
+        )
 
     async def subscribe(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Subscribe to notifications"""
