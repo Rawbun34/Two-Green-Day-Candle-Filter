@@ -12,7 +12,7 @@ load_dotenv()
 env_loaded = True
 
 # Import the trading strategy
-from two_green_filter_binance import CryptoTradingStrategy
+from src.two_green_filter_binance import CryptoTradingStrategy
 
 # Enable logging
 logging.basicConfig(
